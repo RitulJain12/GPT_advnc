@@ -56,11 +56,12 @@ module.exports.loginUser= async(req,res)=>{
       const token=jwt.sign({id:user._id},process.env.KEY);
       res.cookie("token", token, {
         httpOnly: true,
-        secure: false,       
-        sameSite: "lax",    
-        path: "/",           //
-        maxAge: 7 * 24 * 60 * 60 * 1000  
-    });
+        secure: true,        // MUST on https
+        sameSite: "none",    // MUST for cross-origin
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      });
+      
     
       console.log("loging......");
       res.status(200).json({
