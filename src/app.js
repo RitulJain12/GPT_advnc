@@ -6,10 +6,16 @@ app.use(express.json());
 const authRoutes=require('./routes/authRoutes');
 const chatRoutes=require('../src/routes/ChatRoute');
 const cors=require('cors');
+const cors = require("cors");
+
 app.use(cors({
-    origin:"https://gpt-advnc-1.onrender.com",
-    credentials: true, 
-}))
+  origin: [
+    "http://localhost:5173",
+    "https://your-frontend.onrender.com"
+  ],
+  credentials: true
+}));
+
 
 app.use('/api/auth',authRoutes);
 app.use('/api/chat',chatRoutes);
