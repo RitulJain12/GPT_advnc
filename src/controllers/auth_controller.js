@@ -16,7 +16,12 @@ module.exports.registerUser= async(req,res)=>{
     password,
    })
     const token=jwt.sign({id:user._id},process.env.KEY);
-    res.cookie('token',token);
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: true,          
+      sameSite: "none",      
+    });
+    
     res.status(201).json({
         message:"User Successfully Registered",
         user:{
