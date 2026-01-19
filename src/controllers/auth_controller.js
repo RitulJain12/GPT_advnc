@@ -73,10 +73,7 @@ module.exports.loginUser= async(req,res)=>{
           }
       })
   
-  }
-
- 
-    
+  }  
   module.exports.logOut= async(req,res)=>{
   
       const {token}=req.cookies;
