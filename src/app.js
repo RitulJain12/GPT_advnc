@@ -11,7 +11,8 @@ const cors = require("cors");
 app.use(cors({
   origin: [
     "http://localhost:5173",
-    "https://your-frontend.onrender.com"
+    "https://your-frontend.onrender.com",
+    "https://aasstraa-ai.netlify.app/"
   ],
   credentials: true
 }));
