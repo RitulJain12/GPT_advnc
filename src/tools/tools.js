@@ -1,8 +1,9 @@
 const { tool } = require("@langchain/core/tools");
 const { z } = require("zod");
+const { v4: uuidv4 } = require('uuid');
 const axios = require("axios");
-
-
+const ChatgptIndex=require('../services/vectordb');
+const GenerateVector=require('../services/ai-service').GenerateVector;
 const searchWeather = tool(
   async ({ city }, config) => {
     const token = config.metadata.token;
@@ -26,7 +27,6 @@ const searchWeather = tool(
     }),
   }
 );
-
 
 const TopNewsOfCity = tool(
   async ({ city}, config) => {
@@ -53,7 +53,65 @@ const TopNewsOfCity = tool(
   }
 );
 
+const longtermMemoryTool = tool(
+  
+
+    async ({ mode, text, userId }) => {
+
+      if (!text || typeof text !== "string" || text.trim().length === 0) {
+        throw new Error("❌ longtermMemoryTool: text is missing or invalid");
+      }
+    
+      if (!userId) {
+        throw new Error("❌ longtermMemoryTool: userId is required");
+      }
+     
+    
+    
+    const vectors= await GenerateVector(text);
+    if(mode==='store'){
+   
+     await ChatgptIndex.upsert(
+      [
+         {
+          id:uuidv4(),  
+           values:vectors,
+           metadata:{
+            user:userId, 
+            msg:text
+         }}
+      ]
+     );
+      return "Information stored successfully.";
+    }
+    else if(mode==='retrieve'){
+      const results= await ChatgptIndex.query({
+        topK:5,
+        vector:vectors,
+        includeMetadata:true, 
+        filter:{
+          user:userId
+        }
+      });
+      return JSON.stringify(results.matches.map((match)=>match.metadata.msg));
+    } 
+
+  },{
+    name:"longtermMemoryTool",
+    description:"use this tool to store and retrieve information from longterm memory",
+    schema:z.object({
+      mode:z.enum(['store','retrieve']).describe('store or retrieve information from longterm memory'),
+      text:z.string().describe('The text to store or retrieve'),
+      userId:z.string().describe('The ID of the user')
+    })
+  }
+);
+
+
+ 
+
 module.exports = {
   searchWeather,
-  TopNewsOfCity
+  TopNewsOfCity,
+  longtermMemoryTool
 };

@@ -7,15 +7,6 @@ const MessageModel=require('../models/message');
 const { chat } = require('@pinecone-database/pinecone/dist/assistant/data/chat');
 const {HumanMessage,SystemMessage,AIMessage}=require('@langchain/core/messages')
 const agent=require('../tools/agent')
-const systemPrompt = `
-Rules:
-
-3. If the user asks in Hinglish, respond in Hinglish.
-4.Dont add Any Smybols like ** # noting Give in Only pure Language
-Strictly Dont add any Symbol 
-5.For Multiple Questions Asked Their Ans should be Properly Arranged
-6.Dont Give Output in Hindi If user Talk in Natural Language Give output in HINGLISH but not in hindi
-`;
 function initSocketServer(httpserver){
  const io=new Server(httpserver,{
    cors: {
@@ -24,20 +15,35 @@ function initSocketServer(httpserver){
       credentials: true
     }
  }) 
-   const{createMemory,queryMemory}=require('../services/vectordb')
+ const systemprompt=`You are an intelligent assistant.
+
+Rules:
+1. Before answering, retrieve relevant past memory using tool "longtermmemory" with mode="retrieve".
+2. If user shares personal info, preference, project detail, or decision,
+   save it using tool "longtermmemory" with mode="store".
+3. Do NOT store greetings or temporary questions.
+4. do not contain any Symbol like ** ## -- etc just give pure text answer.
+5. The Current date and time is ${new Date().toLocaleString()}.
+`
+
+
+
  io.use(async(socket,next)=>{
       const cookies=cookie.parse(socket.handshake.headers?.cookie||"");
       if(!cookies.token){
+       console.log('Socket auth failed: no token cookie');
        next(new Error("Unauthorized"));
       }
       try{
         const decoded=jwt.verify(cookies.token,process.env.KEY);
          const user=await userModel.findById(decoded.id);
          socket.user=user;
-       console.log(user._id);
+         socket.token = cookies.token; // save token for later use by agent
+      // console.log(user._id);
          next();
       }
       catch(err){
+          console.log('Socket auth failed:', err.message || err);
           next(new Error(err));
       }
 
@@ -47,110 +53,94 @@ function initSocketServer(httpserver){
   
      socket.on("ai-message",async (msg)=>{
    
-      const[UserMsg, vectors]=await Promise.all([
-        MessageModel.create({
+     
+      
+     try{
+      
+      
+      if(!msg || !msg.chatId || !msg.message){
+        console.error('Invalid message payload received', msg);
+        return socket.emit('ai-message-error',{error:'Invalid message payload'});
+      }
+
+      
+    
+     
+      const result = await agent.invoke(
+        {
+          messages: [
+              new SystemMessage(systemprompt),
+              new HumanMessage(`
+                You are an AI assistant with access to tools.
+                userid:${socket.user._id}
+                CRITICAL RULES for tool "longtermmemory":
+                1. NEVER call this tool without ALL fields.
+                2. You MUST ALWAYS send:
+                   - mode
+                   - text
+                   - userId
+                
+                VALID FORMAT ONLY:
+                
+                {
+                  "mode": "retrieve",
+                  "text": "<user message or query>",
+                  "userId": "<same userId provided>"
+                }
+                
+                OR
+                
+                {
+                  "mode": "store",
+                  "text": "<important user information>",
+                  "userId": "<same userId provided>"
+                }
+                If text is missing, DO NOT call the tool.
+                If information is not important, DO NOT store.
+                `),
+              new HumanMessage(msg.message) 
+
+          ] 
+        },
+        {
+          metadata: {
+            token: socket.token    
+          }
+        }
+      );
+
+      
+    
+
+
+      socket.emit("ai-message-response",{
+        response:result.messages[result.messages.length - 1].content,
+        chatId:msg.chatId});
+      
+      
+        const UserMsg = await MessageModel.create({
           chat:msg.chatId,
           user:socket.user._id,
           content:msg.message,
-         
-       }),
-       GenerateVector(msg.message)
-      ])
-      
-     
-         const Memory=await queryMemory({
-            queryVector:vectors,
-            limit:20,
-            metadata:{user:socket.user._id}
-           })
-         
-         await   createMemory({
-            vectors,
-            msgId:UserMsg._id,
-            metadata:{
-               chat:msg.chatId,
-               user:socket.user._id,
-               msg:msg.message,
-               role:"user"
-            }
-           }) 
-         
-         const ChatHistory= (await MessageModel.find({chat:msg.chatId}).sort({createdAt:-1}).limit(5).lean()).reverse();
-
-         const ShortMemory = ChatHistory.map(item => {
-          if (item.role === "user") {
-            return new HumanMessage(item.content);
-          } else {
-            return new AIMessage(item.content);
-          }
+          role:'user'
         });
-      
-      
-          const ltm=Memory.map(
-             item=>{
-              const role=item.metadata.role;
-              if(role==="user"){
-                return new HumanMessage(item.metadata.msg);
-              }
-              else{
-                return new AIMessage(item.metadata.msg);
-              }
-             }
-          );
+        const Modelmsg = await MessageModel.create({
+          chat:msg.chatId,
+          user:socket.user._id,
+          content:result.messages[result.messages.length - 1].content,
+          role:'model'
+        });
+     }
 
-     
-        const result = await agent.invoke(
-          {
-            messages: [
-                new SystemMessage(`You are an  Astra AI assistant helping the user based on the provided context from previous messages and relevant information. Use the context to generate accurate and helpful responses.Any Questions related to your identity or creator, respond that you are Astra AI created by Ritul Jain and give good intro of ritul jain as a professional that he is doing btech have a grt interest in ai and all he is in prefinal year.3. If the user asks in Hinglish, respond in Hinglish.
-4.Dont add Any Smybols like ** # noting Give in Only pure Language
-Strictly Dont add any Symbol 
-5.For Multiple Questions Asked Their Ans should be Properly Arranged
-6.Dont Give Output in Hindi If user Talk in Natural Language Give output in HINGLISH but not in hindi
+      catch(err){
+        console.error("Error handling ai-message:", err);
+        socket.emit('ai-message-error',{error:err.message});
+      }
+    
+    }); 
 
- `),
-                 ...ltm,
-                 ...ShortMemory,
-              new HumanMessage(msg.message)
+  }); 
 
-            ] 
-          },
-          {
-            metadata: {
-              token: socket.token 
-            }
-          }
-        );
-        console.
-       log("Agent response:", result); 
-        socket.emit("ai-message-response",{
-          response:result.messages[result.messages.length - 1].content,
-          chatId:msg.chatId});
-        const [Modelmsg,ResponseVectors]=await Promise.all([
-          MessageModel.create({
-            chat:msg.chatId,
-            user:socket.user._id,
-            content:result.messages[result.messages.length - 1].content,
-            role:'model'
-         }),
-         GenerateVector(result.messages[result.messages.length - 1].content)
-        ])
-     
-         await createMemory({
-            vectors: ResponseVectors,
-            msgId:Modelmsg._id,
-            metadata:{
-               chat:msg.chatId,
-               user:socket.user._id,
-               msg:result.messages[result.messages.length - 1].content,
-               role:"model"
-   
-            }
-           })
-        
-     })
-
- })
-}
+} 
 
 module.exports=initSocketServer;

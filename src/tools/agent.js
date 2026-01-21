@@ -14,7 +14,7 @@ const graph = new StateGraph(MessagesAnnotation)
   
   .addNode("chat", async (state, config) => {
     const response = await model.invoke(state.messages, {
-      tools: [tools.searchWeather, tools.TopNewsOfCity],
+      tools: [tools.searchWeather, tools.TopNewsOfCity,tools.longtermMemoryTool],
     });
 
     return {
