@@ -7,7 +7,7 @@ const authRoutes=require('./routes/authRoutes');
 const chatRoutes=require('../src/routes/ChatRoute');
 const path=require('path');
 const cors = require("cors");
-
+app.use(express.static('./public'))
 app.use(cors({
   origin: [
     "http://localhost:5173",
