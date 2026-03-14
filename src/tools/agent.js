@@ -14,7 +14,7 @@ const graph = new StateGraph(MessagesAnnotation)
   
   .addNode("chat", async (state, config) => {
     const response = await model.invoke(state.messages, {
-      tools: [tools.searchWeather, tools.TopNewsOfCity,tools.longtermMemoryTool],
+      tools: [tools.searchWeather, tools.TopNewsOfCity,tools.longtermMemoryTool,tools.webSearchTool],
     });
 
     return {
@@ -60,17 +60,14 @@ const graph = new StateGraph(MessagesAnnotation)
   })
   
 
-
-  .addEdge("__start__", "chat")
-
-  .addConditionalEdges("chat", (state) => {
+.addEdge("__start__", "chat")
+.addConditionalEdges("chat", (state) => {
     const last = state.messages[state.messages.length - 1];
     return last.tool_calls && last.tool_calls.length > 0
       ? "tools"
       : "__end__";
   })
-
-  .addEdge("tools", "chat");
+.addEdge("tools", "chat");
 
 const agent = graph.compile();
 module.exports = agent;

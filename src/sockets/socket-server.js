@@ -36,10 +36,11 @@ Rules:
       }
       try{
         const decoded=jwt.verify(cookies.token,process.env.KEY);
+        console.log(decoded);
          const user=await userModel.findById(decoded.id);
          socket.user=user;
          socket.token = cookies.token; // save token for later use by agent
-      // console.log(user._id);
+         console.log(user);
          next();
       }
       catch(err){
@@ -48,7 +49,7 @@ Rules:
       }
 
  }) 
-
+  
  io.on('connection',(socket)=>{
   
      socket.on("ai-message",async (msg)=>{
@@ -58,13 +59,13 @@ Rules:
      try{
       
       
-      if(!msg || !msg.chatId || !msg.message){
-        console.error('Invalid message payload received', msg);
-        return socket.emit('ai-message-error',{error:'Invalid message payload'});
-      }
+      // if(!msg || !msg.chatId || !msg.message){
+      //   console.error('Invalid message payload received', msg);
+      //   return socket.emit('ai-message-error',{error:'Invalid message payload'});
+      // }
 
       
-    
+     console.log(msg);
      
       const result = await agent.invoke(
         {
@@ -72,7 +73,7 @@ Rules:
               new SystemMessage(systemprompt),
               new HumanMessage(`
                 You are an AI assistant with access to tools.
-                userid:${socket.user._id}
+               
                 CRITICAL RULES for tool "longtermmemory":
                 1. NEVER call this tool without ALL fields.
                 2. You MUST ALWAYS send:
@@ -112,7 +113,7 @@ Rules:
       
     
 
-
+console.log(result.messages[result.messages.length - 1].content)
       socket.emit("ai-message-response",{
         response:result.messages[result.messages.length - 1].content,
         chatId:msg.chatId});

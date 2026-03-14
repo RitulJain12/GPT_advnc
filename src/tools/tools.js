@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const axios = require("axios");
 const ChatgptIndex=require('../services/vectordb');
 const GenerateVector=require('../services/ai-service').GenerateVector;
+const { tavily } = require('@tavily/core');
 const searchWeather = tool(
   async ({ city }, config) => {
     const token = config.metadata.token;
@@ -59,11 +60,11 @@ const longtermMemoryTool = tool(
     async ({ mode, text, userId }) => {
 
       if (!text || typeof text !== "string" || text.trim().length === 0) {
-        throw new Error("❌ longtermMemoryTool: text is missing or invalid");
+        throw new Error(" longtermMemoryTool: text is missing or invalid");
       }
     
       if (!userId) {
-        throw new Error("❌ longtermMemoryTool: userId is required");
+        throw new Error(" longtermMemoryTool: userId is required");
       }
      
     
@@ -107,11 +108,29 @@ const longtermMemoryTool = tool(
   }
 );
 
+const webSearchTool = tool(async ({query})=>{
+  
+  const client = tavily({ apiKey: "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" });
+    const ans= await client.search(query, {
+      searchDepth: "advanced"
+  })
+ 
+   console.log(`ansis : `,ans);
+   return JSON.stringify(ans);
+},{
+  name:"webSearchTool",
+  description:"use this tool to search the query on web",
+  schema:z.object({
+    query:z.string().describe('query that needs to be search in webtool')
+  })
+})
+
 
  
 
 module.exports = {
   searchWeather,
   TopNewsOfCity,
-  longtermMemoryTool
+  longtermMemoryTool,
+  webSearchTool
 };
