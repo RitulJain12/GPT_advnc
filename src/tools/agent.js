@@ -9,14 +9,15 @@ const tools = require("./tools");
 
 const model = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
-  model: "openai/gpt-oss-120b",
+  model: "llama-3.1-8b-instant", 
   temperature: 0.5,
+  streaming: true, 
 });
 
 
 const graph = new StateGraph(MessagesAnnotation)
 
-.addNode("chat", async (state, config) => {
+  .addNode("chat", async (state, config) => {
     const response = await model.invoke(state.messages, {
       tools: [tools.searchWeather, tools.TopNewsOfCity, tools.longtermMemoryTool, tools.webSearchTool, tools.emailSendTool],
     });

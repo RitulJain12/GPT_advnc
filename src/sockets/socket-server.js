@@ -20,11 +20,13 @@ function initSocketServer(httpserver) {
 
   const systemprompt = `You are an intelligent assistant.
 Rules:
-1. Before answering, retrieve relevant past memory using tool "longtermmemory" with mode="retrieve".
+
+1. ONLY retrieve relevant past memory using tool "longtermmemory" with mode="retrieve" IF you need context about the user's past messages to answer their current question. If not needed, DO NOT call it.
 2. If user shares personal info, preference, project detail, or decision,
    save it using tool "longtermmemory" with mode="store".
 3. Do NOT store greetings or temporary questions.
 4. do not contain any Symbol like ** ## -- etc just give pure text answer.
+5. DO NOT mention or explain your tools (like longtermmemory) to the user. Just act naturally.
 5. The Current date and time is ${new Date().toLocaleString()}.
 `
 
@@ -70,13 +72,13 @@ Rules:
 
         console.log(msg);
 
-        const result = await agent.invoke(
+        const stream = await agent.streamEvents(
           {
             messages: [
               new SystemMessage(systemprompt),
               new SystemMessage(`
                 You are an AI assistant with access to tools.
-               
+                 the current userId is ${socket.user._id}
                 CRITICAL RULES for tool "longtermmemory":
                 1. NEVER call this tool without ALL fields.
                 2. You MUST ALWAYS send:
@@ -101,6 +103,11 @@ Rules:
                 }
                 If text is missing, DO NOT call the tool.
                 If information is not important, DO NOT store.
+                
+                CRITICAL INSTRUCTION: 
+                DO NOT tell the user what you are doing with the memory tools. 
+                If you decide not to use the tool, DO NOT say "I don't need to store any information". 
+                Just answer the user's question directly and naturally.
                 `),
               new HumanMessage(msg.message)
 
@@ -108,6 +115,7 @@ Rules:
 
           },
           {
+            version: "v2",
             configurable: {
               thread_id: msg.chatId.toString()
             },
@@ -117,12 +125,28 @@ Rules:
           }
         );
 
+        let finalResponse = "";
 
+        for await (const event of stream) {
+          const eventType = event.event;
 
+          if (eventType === "on_chat_model_stream") {
+            const chunk = event.data.chunk;
+            if (chunk && chunk.content && typeof chunk.content === "string") {
+              finalResponse += chunk.content;
 
-        console.log(result.messages[result.messages.length - 1].content)
+              socket.emit("ai-message-chunk", {
+                chunk: chunk.content,
+                chatId: msg.chatId
+              });
+            }
+          }
+        }
+
+        console.log(finalResponse);
+
         socket.emit("ai-message-response", {
-          response: result.messages[result.messages.length - 1].content,
+          response: finalResponse,
           chatId: msg.chatId
         });
 
@@ -136,7 +160,7 @@ Rules:
         const Modelmsg = await MessageModel.create({
           chat: msg.chatId,
           user: socket.user._id,
-          content: result.messages[result.messages.length - 1].content,
+          content: finalResponse,
           role: 'model'
         });
       }
