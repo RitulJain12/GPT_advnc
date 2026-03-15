@@ -1,23 +1,24 @@
 const { Server } = require('socket.io');
-const cookie=require('cookie');
-const jwt=require('jsonwebtoken');
-const userModel=require('../models/user');
-const MessageModel=require('../models/message');
-const {HumanMessage,SystemMessage,AIMessage}=require('@langchain/core/messages')
-const agent=require('../tools/agent')
+const cookie = require('cookie');
+const jwt = require('jsonwebtoken');
+const userModel = require('../models/user');
+const MessageModel = require('../models/message');
+const { HumanMessage, SystemMessage, AIMessage } = require('@langchain/core/messages')
+const agent = require('../tools/agent')
 
-function initSocketServer(httpserver){
- const io=new Server(httpserver,{
-   cors: {
+
+function initSocketServer(httpserver) {
+  const io = new Server(httpserver, {
+    cors: {
       origin: "http://localhost:5173",
-      methods: ["GET", "POST","PUT","PATCH","DELETE"],
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
       credentials: true
     }
- }) 
+  })
 
 
 
- const systemprompt=`You are an intelligent assistant.
+  const systemprompt = `You are an intelligent assistant.
 Rules:
 1. Before answering, retrieve relevant past memory using tool "longtermmemory" with mode="retrieve".
 2. If user shares personal info, preference, project detail, or decision,
@@ -29,48 +30,49 @@ Rules:
 
 
 
- io.use(async(socket,next)=>{
-      const cookies=cookie.parse(socket.handshake.headers?.cookie||"");
-      if(!cookies.token){
-       console.log('Socket auth failed: no token cookie');
-       next(new Error("Unauthorized"));
-      }
-      try{
-        const decoded=jwt.verify(cookies.token,process.env.KEY);
-        console.log(decoded);
-         const user=await userModel.findById(decoded.id);
-         socket.user=user;
-         socket.token = cookies.token; 
-         console.log(user);
-         next();
-      }
-      catch(err){
-          console.log('Socket auth failed:', err.message || err);
-          next(new Error(err));
-      }
+  io.use(async (socket, next) => {
+    const cookies = cookie.parse(socket.handshake.headers?.cookie || "");
 
- }) 
-  
- io.on('connection',(socket)=>{
-  
-     socket.on("ai-message",async (msg)=>{
-   
-     
-      
-     try{
-      
-      
-      // if(!msg || !msg.chatId || !msg.message){
-      //   console.error('Invalid message payload received', msg);
-      //   return socket.emit('ai-message-error',{error:'Invalid message payload'});
-      // }
+    if (!cookies.token) {
+      console.log('Socket auth failed: no token cookie');
+      next(new Error("Unauthorized"));
+    }
+    try {
+      const decoded = jwt.verify(cookies.token, process.env.KEY);
+      console.log(decoded);
+      const user = await userModel.findById(decoded.id);
+      socket.user = user;
+      socket.token = cookies.token;
+      console.log(user);
+      next();
+    }
+    catch (err) {
+      console.log('Socket auth failed:', err.message || err);
+      next(new Error(err));
+    }
 
-      
-     console.log(msg);
-     
-      const result = await agent.invoke(
-        {
-          messages: [
+  })
+
+  io.on('connection', (socket) => {
+
+    socket.on("ai-message", async (msg) => {
+
+
+
+      try {
+
+
+        if (!msg || !msg.chatId || !msg.message) {
+          console.error('Invalid message payload received', msg);
+          return socket.emit('ai-message-error', { error: 'Invalid message payload' });
+        }
+
+
+        console.log(msg);
+
+        const result = await agent.invoke(
+          {
+            messages: [
               new SystemMessage(systemprompt),
               new SystemMessage(`
                 You are an AI assistant with access to tools.
@@ -100,49 +102,54 @@ Rules:
                 If text is missing, DO NOT call the tool.
                 If information is not important, DO NOT store.
                 `),
-              new HumanMessage(msg.message) 
+              new HumanMessage(msg.message)
 
-          ] 
-        },
-        {
-          metadata: {
-            token: socket.token    
+            ],
+
+          },
+          {
+            configurable: {
+              thread_id: msg.chatId.toString()
+            },
+            metadata: {
+              token: socket.token
+            }
           }
-        }
-      );
+        );
 
-      
-    
 
-console.log(result.messages[result.messages.length - 1].content)
-      socket.emit("ai-message-response",{
-        response:result.messages[result.messages.length - 1].content,
-        chatId:msg.chatId});
-      
-      
-        // const UserMsg = await MessageModel.create({
-        //   chat:msg.chatId,
-        //   user:socket.user._id,
-        //   content:msg.message,
-        //   role:'user'
-        // });
-        // const Modelmsg = await MessageModel.create({
-        //   chat:msg.chatId,
-        //   user:socket.user._id,
-        //   content:result.messages[result.messages.length - 1].content,
-        //   role:'model'
-        // });
-     }
 
-      catch(err){
-        console.error("Error handling ai-message:", err);
-        socket.emit('ai-message-error',{error:err.message});
+
+        console.log(result.messages[result.messages.length - 1].content)
+        socket.emit("ai-message-response", {
+          response: result.messages[result.messages.length - 1].content,
+          chatId: msg.chatId
+        });
+
+
+        const UserMsg = await MessageModel.create({
+          chat: msg.chatId,
+          user: socket.user._id,
+          content: msg.message,
+          role: 'user'
+        });
+        const Modelmsg = await MessageModel.create({
+          chat: msg.chatId,
+          user: socket.user._id,
+          content: result.messages[result.messages.length - 1].content,
+          role: 'model'
+        });
       }
-    
-    }); 
 
-  }); 
+      catch (err) {
+        console.error("Error handling ai-message:", err);
+        socket.emit('ai-message-error', { error: err.message });
+      }
 
-} 
+    });
 
-module.exports=initSocketServer;
+  });
+
+}
+
+module.exports = initSocketServer;

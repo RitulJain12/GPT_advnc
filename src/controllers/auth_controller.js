@@ -1,6 +1,8 @@
 const userModel=require('../models/user');
 const bcrypt=require('bcrypt');
 const jwt=require('jsonwebtoken');
+
+
 module.exports.registerUser= async(req,res)=>{
   let{fullName:{firstName,lastName},email,password}=req.body;
   password= await bcrypt.hash(password,10);
@@ -37,6 +39,8 @@ module.exports.registerUser= async(req,res)=>{
 
 
 }
+
+
 module.exports.loginUser= async(req,res)=>{
     const{email,password}=req.body;
     if (!email || !password) {
@@ -74,6 +78,8 @@ module.exports.loginUser= async(req,res)=>{
       })
   
   }  
+
+
   module.exports.logOut= async(req,res)=>{
   
       const {token}=req.cookies;
