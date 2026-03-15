@@ -14,8 +14,10 @@ const graph = new StateGraph(MessagesAnnotation)
   
   .addNode("chat", async (state, config) => {
     const response = await model.invoke(state.messages, {
-      tools: [tools.searchWeather, tools.TopNewsOfCity,tools.longtermMemoryTool,tools.webSearchTool],
+      tools: [tools.searchWeather, tools.TopNewsOfCity,tools.longtermMemoryTool,tools.webSearchTool,tools.emailSendTool],
     });
+
+    console.log(response);
 
     return {
       messages: [

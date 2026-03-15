@@ -2,11 +2,10 @@ const { Server } = require('socket.io');
 const cookie=require('cookie');
 const jwt=require('jsonwebtoken');
 const userModel=require('../models/user');
-const {GenerateVector,GenerateResponse}=require('../services/ai-service');
 const MessageModel=require('../models/message');
-const { chat } = require('@pinecone-database/pinecone/dist/assistant/data/chat');
 const {HumanMessage,SystemMessage,AIMessage}=require('@langchain/core/messages')
 const agent=require('../tools/agent')
+
 function initSocketServer(httpserver){
  const io=new Server(httpserver,{
    cors: {
@@ -15,8 +14,10 @@ function initSocketServer(httpserver){
       credentials: true
     }
  }) 
- const systemprompt=`You are an intelligent assistant.
 
+
+
+ const systemprompt=`You are an intelligent assistant.
 Rules:
 1. Before answering, retrieve relevant past memory using tool "longtermmemory" with mode="retrieve".
 2. If user shares personal info, preference, project detail, or decision,
@@ -39,7 +40,7 @@ Rules:
         console.log(decoded);
          const user=await userModel.findById(decoded.id);
          socket.user=user;
-         socket.token = cookies.token; // save token for later use by agent
+         socket.token = cookies.token; 
          console.log(user);
          next();
       }
@@ -71,7 +72,7 @@ Rules:
         {
           messages: [
               new SystemMessage(systemprompt),
-              new HumanMessage(`
+              new SystemMessage(`
                 You are an AI assistant with access to tools.
                
                 CRITICAL RULES for tool "longtermmemory":
@@ -119,18 +120,18 @@ console.log(result.messages[result.messages.length - 1].content)
         chatId:msg.chatId});
       
       
-        const UserMsg = await MessageModel.create({
-          chat:msg.chatId,
-          user:socket.user._id,
-          content:msg.message,
-          role:'user'
-        });
-        const Modelmsg = await MessageModel.create({
-          chat:msg.chatId,
-          user:socket.user._id,
-          content:result.messages[result.messages.length - 1].content,
-          role:'model'
-        });
+        // const UserMsg = await MessageModel.create({
+        //   chat:msg.chatId,
+        //   user:socket.user._id,
+        //   content:msg.message,
+        //   role:'user'
+        // });
+        // const Modelmsg = await MessageModel.create({
+        //   chat:msg.chatId,
+        //   user:socket.user._id,
+        //   content:result.messages[result.messages.length - 1].content,
+        //   role:'model'
+        // });
      }
 
       catch(err){

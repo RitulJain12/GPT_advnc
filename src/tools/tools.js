@@ -5,6 +5,17 @@ const axios = require("axios");
 const ChatgptIndex=require('../services/vectordb');
 const GenerateVector=require('../services/ai-service').GenerateVector;
 const { tavily } = require('@tavily/core');
+const nodemailer=require('nodemailer');
+
+const transporter=nodemailer.createTransport({
+  secure:true,
+  host:"smtp.gmail.com",
+  port:465,
+  auth:{
+      user:"ritulworkss@gmail.com",
+      pass:'unwlkvddebcqwbqc'
+  }
+})
 const searchWeather = tool(
   async ({ city }, config) => {
     const token = config.metadata.token;
@@ -125,6 +136,38 @@ const webSearchTool = tool(async ({query})=>{
   })
 })
 
+const emailSendTool=tool(({to,subject,msg})=>{
+
+   async function sendEmail(to,subject,msg){
+   try{
+    
+     await transporter.sendMail({
+    to:to,
+    subject:subject,
+    html:msg
+ })
+ console.log("Sent");
+   }
+   catch(err){
+    console.log(err.message);
+    return ` err in sending a mail ${err}`
+   }
+   return  `Mail is sended to ${to}`
+  }
+  
+ return JSON.stringify(sendEmail(to,subject,msg));
+
+},{
+  name:"emailSendTool",
+  description:"sends emails on the provided mail",
+  schema:z.object({
+
+    to:z.string().describe("The email of a person whom you need to send mail"),
+    subject:z.string().describe('The subject of an email'),
+    msg:z.string().describe("The message need to send in email"),
+
+  })
+})
 
  
 
@@ -132,5 +175,6 @@ module.exports = {
   searchWeather,
   TopNewsOfCity,
   longtermMemoryTool,
-  webSearchTool
+  webSearchTool,
+  emailSendTool
 };
