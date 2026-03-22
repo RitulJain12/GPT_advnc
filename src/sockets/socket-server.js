@@ -22,7 +22,7 @@ function initSocketServer(httpserver) {
 Rules:
 
 1. ONLY retrieve relevant past memory using tool "longtermmemory" with mode="retrieve" IF you need context about the user's past messages to answer their current question. If not needed, DO NOT call it.
-2. If user shares personal info, preference, project detail, or decision,
+2. If user shares name, personal info, preference, project detail, or decision, or anything you thought it will hwlp in future
    save it using tool "longtermmemory" with mode="store".
 3. Do NOT store greetings or temporary questions.
 4. do not contain any Symbol like ** ## -- etc just give pure text answer.

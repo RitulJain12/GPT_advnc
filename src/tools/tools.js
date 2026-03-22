@@ -121,7 +121,7 @@ const longtermMemoryTool = tool(
 
 const webSearchTool = tool(async ({query})=>{
   
-  const client = tavily({ apiKey: "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" });
+  const client = tavily({ apiKey: process.env.TAVILY_API_KEY });
     const ans= await client.search(query, {
       searchDepth: "advanced"
   })
