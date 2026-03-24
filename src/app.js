@@ -12,7 +12,8 @@ app.use(cors({
   origin: [
     "http://localhost:5173",
     "https://your-frontend.onrender.com",
-    "https://aasstraa-ai.netlify.app/"
+    "https://aasstraa-ai.netlify.app/",
+    "https://aastraa.vercel.app"
   ],
   credentials: true
 }));
@@ -20,6 +21,11 @@ app.use(express.static(path.join(__dirname,'../public')))
 
 app.use('/api/auth',authRoutes);
 app.use('/api/chat',chatRoutes);
+app.use('/api/health',(req,res)=>{
+  res.status(200).json({
+    message:"Server is Working"
+  })
+})
 
 app.get("*name",(req,res)=>{
   res.sendFile(path.join(__dirname,'../public/index.html'));
