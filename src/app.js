@@ -1,4 +1,5 @@
 const express=require('express');
+const app=express();
 const cookieParser=require('cookie-parser');
 const authRoutes=require('./routes/authRoutes');
 const chatRoutes=require('../src/routes/ChatRoute');
@@ -6,7 +7,7 @@ const chatRoutes=require('../src/routes/ChatRoute');
 const path=require('path');
 const cors = require("cors");
 app.use(express.static('./public'))
-const app=express();
+
 app.use(cookieParser());
 app.use(express.json());
 app.use(cors({
