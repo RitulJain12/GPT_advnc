@@ -10,7 +10,12 @@ const agent = require('../tools/agent')
 function initSocketServer(httpserver) {
   const io = new Server(httpserver, {
     cors: {
-      origin: "http://localhost:5173",
+      origin: [
+        "http://localhost:5173",
+        "https://your-frontend.onrender.com", 
+        "https://aasstraa-ai.netlify.app",
+        "https://aastraa.vercel.app"
+      ],
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
       credentials: true
     }

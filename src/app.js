@@ -10,13 +10,15 @@ app.use(express.static('./public'))
 
 app.use(cookieParser());
 app.use(express.json());
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://your-frontend.onrender.com", 
+  "https://aasstraa-ai.netlify.app",
+  "https://aastraa.vercel.app"
+];
+
 app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "https://your-frontend.onrender.com", 
-    "https://aasstraa-ai.netlify.app/",
-    "https://aastraa.vercel.app" 
-  ],
+  origin: allowedOrigins,
   credentials: true
 }));
 app.use(express.static(path.join(__dirname,'../public')))
