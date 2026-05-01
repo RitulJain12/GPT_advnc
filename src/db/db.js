@@ -6,7 +6,8 @@ async function Dbconnect() {
         console.log("Connected to DB");
     }
     catch(err){
-        console.log(err);
+        console.log("Database connection failed:", err);
+        throw err;
     }
 }
 module.exports=Dbconnect;

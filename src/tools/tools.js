@@ -11,9 +11,9 @@ const transporter=nodemailer.createTransport({
   secure:true,
   host:"smtp.gmail.com",
   port:465,
-  auth:{
-      user:"ritulworkss@gmail.com",
-      pass:'unwlkvddebcqwbqc'
+  auth:{ 
+      user:process.env.GMAIL_USER,
+      pass:process.env.GMAIL_PASS
   }
 })
 const searchWeather = tool(
@@ -42,7 +42,7 @@ const searchWeather = tool(
 
 const TopNewsOfCity = tool(
   async ({ city}, config) => {
-//const token = config.metadata.token;
+    //const token = config.metadata.token;
    //// if(quantity>stock) throw Error('The Quantity Of Product Exceeds the Stock')
    console.log(city);
  const res=   await axios.get(

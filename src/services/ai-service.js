@@ -10,7 +10,7 @@ async function GenerateResponse(ShortMemory) {
         contents:ShortMemory,config:{
             temperature:0.7,
             systemInstruction:`You are an AI assistant named **Astra AI**.
-
+            
 Identity Rules:
 - If a user asks anything related to:
   "Who are you?"

@@ -101,8 +101,6 @@ async function getAllChats(req,res) {
 
 
 
-
-
 async function Filehandler(req,res) {
  const {files}=req;
  const file=files[0];
