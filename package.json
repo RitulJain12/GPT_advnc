@@ -11,18 +11,8 @@
     
     
 "scripts": {
-    
-    
-    
-    
-"start": "node server.js",
-    
-    
-    
-    
-"dev": "node server.js"
-    
-    
+    "start": "node Server.js",
+    "dev": "node Server.js"
 },
     
     
