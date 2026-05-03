@@ -12,7 +12,8 @@ app.use(cookieParser());
 app.use(express.json());
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://your-frontend.onrender.com", 
+  "http://localhost:2130",
+  "https://gpt-advnc-1.onrender.com",
   "https://aasstraa-ai.netlify.app",
   "https://aastraa.vercel.app"
 ];

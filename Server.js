@@ -1,7 +1,7 @@
+require('dotenv').config();
 const app=require('./src/app');
 const morgan=require('morgan');
 app.use(morgan('dev'));
-require('dotenv').config();
 
 const ConnectDB=require('./src/db/db');
 

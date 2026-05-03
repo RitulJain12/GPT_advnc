@@ -8,9 +8,9 @@ const { tavily } = require('@tavily/core');
 const nodemailer=require('nodemailer');
 
 const transporter=nodemailer.createTransport({
-  secure:true,
   host:"smtp.gmail.com",
-  port:465,
+  port:587,
+  secure: false, 
   auth:{ 
       user:process.env.GMAIL_USER,
       pass:process.env.GMAIL_PASS
@@ -98,7 +98,7 @@ const longtermMemoryTool = tool(
     }
     else if(mode==='retrieve'){
       const results= await ChatgptIndex.query({
-        topK:5,
+        topK:3,
         vector:vectors,
         includeMetadata:true, 
         filter:{
@@ -136,26 +136,27 @@ const webSearchTool = tool(async ({query})=>{
   })
 })
 
-const emailSendTool=tool(({to,subject,msg})=>{
+const emailSendTool=tool(async({to,subject,msg})=>{
 
    async function sendEmail(to,subject,msg){
    try{
     
-     await transporter.sendMail({
+   const result = await transporter.sendMail({
+    from: process.env.GMAIL_USER,
     to:to,
     subject:subject,
     html:msg
  })
- console.log("Sent");
+ console.log("Email sent result:", result);
    }
    catch(err){
-    console.log(err.message);
+    console.log("Email send error:", err.message);
     return ` err in sending a mail ${err}`
    }
    return  `Mail is sended to ${to}`
   }
   
- return JSON.stringify(sendEmail(to,subject,msg));
+ return JSON.stringify(await sendEmail(to,subject,msg));
 
 },{
   name:"emailSendTool",
