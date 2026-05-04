@@ -71,11 +71,11 @@ const longtermMemoryTool = tool(
     async ({ mode, text, userId }) => {
 
       if (!text || typeof text !== "string" || text.trim().length === 0) {
-        throw new Error(" longtermMemoryTool: text is missing or invalid");
+        return "Error: longtermMemoryTool requires a valid 'text' parameter to store or retrieve information. Please provide it.";
       }
     
       if (!userId) {
-        throw new Error(" longtermMemoryTool: userId is required");
+        return "Error: longtermMemoryTool requires 'userId'.";
       }
      
     
