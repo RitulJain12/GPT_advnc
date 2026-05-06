@@ -51,6 +51,7 @@ const graph = new StateGraph(MessagesAnnotation)
         const result = await tool.invoke(call.args, {
           metadata: {
             token: config.metadata.token,
+            userId: config.metadata.userId,
           },
         });
 

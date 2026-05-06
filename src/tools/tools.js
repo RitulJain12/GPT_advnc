@@ -11,6 +11,7 @@ const transporter=nodemailer.createTransport({
   host:"smtp.gmail.com",
   port:587,
   secure: false, 
+  family: 4, // Force IPv4 to avoid ENETUNREACH on IPv6
   auth:{ 
       user:process.env.GMAIL_USER,
       pass:process.env.GMAIL_PASS
@@ -68,13 +69,16 @@ const TopNewsOfCity = tool(
 const longtermMemoryTool = tool(
   
 
-    async ({ mode, text, userId }) => {
+    async ({ mode, text, userId }, config) => {
+
+      // Extract userId from config metadata if not provided in args
+      const effectiveUserId = userId || config?.metadata?.userId;
 
       if (!text || typeof text !== "string" || text.trim().length === 0) {
         return "Error: longtermMemoryTool requires a valid 'text' parameter to store or retrieve information. Please provide it.";
       }
     
-      if (!userId) {
+      if (!effectiveUserId) {
         return "Error: longtermMemoryTool requires 'userId'.";
       }
      
@@ -89,7 +93,7 @@ const longtermMemoryTool = tool(
           id:uuidv4(),  
            values:vectors,
            metadata:{
-            user:userId, 
+            user:effectiveUserId, 
             msg:text
          }}
       ]
@@ -102,7 +106,7 @@ const longtermMemoryTool = tool(
         vector:vectors,
         includeMetadata:true, 
         filter:{
-          user:userId
+          user:effectiveUserId
         }
       });
       return JSON.stringify(results.matches.map((match)=>match.metadata.msg));
@@ -113,21 +117,32 @@ const longtermMemoryTool = tool(
     description:"use this tool to store and retrieve information from longterm memory",
     schema:z.object({
       mode:z.enum(['store','retrieve']).describe('store or retrieve information from longterm memory'),
-      text:z.string().describe('The text to store or retrieve'),
-      userId:z.string().describe('The ID of the user')
+      text:z.string().describe('The text to store or retrieve (e.g., user fact or query)'),
+      userId:z.string().optional().describe('The ID of the user (optional, will be handled automatically)')
     })
   }
 );
 
 const webSearchTool = tool(async ({query})=>{
   
-  const client = tavily({ apiKey: process.env.TAVILY_API_KEY });
-    const ans= await client.search(query, {
-      searchDepth: "advanced"
-  })
- 
-   console.log(`ansis : `,ans);
-   return JSON.stringify(ans);
+  try {
+    const client = tavily({ apiKey: process.env.TAVILY_API_KEY });
+    const ans = await client.search(query, {
+      searchDepth: "basic",
+      maxResults: 3
+    });
+    
+    const optimizedResults = ans.results.map(res => ({
+      title: res.title,
+      content: res.content,
+      url: res.url
+    }));
+
+    return JSON.stringify(optimizedResults);
+  } catch(err) {
+    console.error("Tavily search error:", err);
+    return "Error: Web search failed. Please inform the user that you are currently unable to search the web due to an internal error.";
+  }
 },{
   name:"webSearchTool",
   description:"use this tool to search the query on web",

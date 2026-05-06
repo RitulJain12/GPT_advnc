@@ -74,11 +74,9 @@ function initSocketServer(httpserver) {
 Current date: ${new Date().toLocaleDateString()}
 
 Memory Rules:
-- Use longtermMemoryTool to retrieve past info before answering.
-- Store new user facts with mode="store".
-- Be natural, don't mention tools.
-
-Parameters: mode ("retrieve" or "store"), text (query or fact), userId ("${socket.user._id}")`),
+- Before answering, use longtermMemoryTool with mode="retrieve" and the user's query as "text" to find relevant past info.
+- If the user shares a new personal fact (e.g., "I like coffee"), use longtermMemoryTool with mode="store" and that fact as "text".
+- Be natural, don't mention tools.`),
               new HumanMessage(msg.message)
 
             ],
@@ -90,7 +88,8 @@ Parameters: mode ("retrieve" or "store"), text (query or fact), userId ("${socke
               thread_id: msg.chatId.toString()
             },
             metadata: {
-              token: socket.token
+              token: socket.token,
+              userId: socket.user._id.toString()
             }
           }
         );
