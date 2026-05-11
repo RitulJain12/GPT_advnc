@@ -7,16 +7,19 @@ const GenerateVector=require('../services/ai-service').GenerateVector;
 const { tavily } = require('@tavily/core');
 const nodemailer=require('nodemailer');
 
-const transporter=nodemailer.createTransport({
-  host:"smtp.gmail.com",
-  port:587,
-  secure: false, 
-  family: 4, // Force IPv4 to avoid ENETUNREACH on IPv6
-  auth:{ 
-      user:process.env.GMAIL_USER,
-      pass:process.env.GMAIL_PASS
-  }
-})
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_PASS
+  },
+  pool: true,
+  maxConnections: 5,
+  maxMessages: 100,
+  connectionTimeout: 10000, 
+  greetingTimeout: 10000,
+  socketTimeout: 10000
+});
 const searchWeather = tool(
   async ({ city }, config) => {
     const token = config.metadata.token;
@@ -71,7 +74,7 @@ const longtermMemoryTool = tool(
 
     async ({ mode, text, userId }, config) => {
 
-      // Extract userId from config metadata if not provided in args
+   
       const effectiveUserId = userId || config?.metadata?.userId;
 
       if (!text || typeof text !== "string" || text.trim().length === 0) {
@@ -84,33 +87,39 @@ const longtermMemoryTool = tool(
      
     
     
-    const vectors= await GenerateVector(text);
-    if(mode==='store'){
-   
-     await ChatgptIndex.upsert(
-      [
-         {
-          id:uuidv4(),  
-           values:vectors,
-           metadata:{
-            user:effectiveUserId, 
-            msg:text
-         }}
-      ]
-     );
-      return "Information stored successfully.";
+    try {
+      const vectors = await GenerateVector(text);
+      if (mode === 'store') {
+
+        await ChatgptIndex.upsert(
+          [
+            {
+              id: uuidv4(),
+              values: vectors,
+              metadata: {
+                user: effectiveUserId,
+                msg: text
+              }
+            }
+          ]
+        );
+        return "Information stored successfully.";
+      }
+      else if (mode === 'retrieve') {
+        const results = await ChatgptIndex.query({
+          topK: 3,
+          vector: vectors,
+          includeMetadata: true,
+          filter: {
+            user: effectiveUserId
+          }
+        });
+        return JSON.stringify(results.matches.map((match) => match.metadata.msg));
+      }
+    } catch (err) {
+      console.error("Long-term memory tool error:", err);
+      return `Error in long-term memory tool: ${err.message || err}. Please proceed without memory if this persists.`;
     }
-    else if(mode==='retrieve'){
-      const results= await ChatgptIndex.query({
-        topK:3,
-        vector:vectors,
-        includeMetadata:true, 
-        filter:{
-          user:effectiveUserId
-        }
-      });
-      return JSON.stringify(results.matches.map((match)=>match.metadata.msg));
-    } 
 
   },{
     name:"longtermMemoryTool",
@@ -151,37 +160,97 @@ const webSearchTool = tool(async ({query})=>{
   })
 })
 
-const emailSendTool=tool(async({to,subject,msg})=>{
+const getEmailTemplate = (subject, msg) => `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #334155;">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; padding: 40px 0;">
+        <tr>
+            <td align="center">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); margin: 0 20px; border: 1px solid #e2e8f0;">
+                    <!-- Minimalist Header with Logo Only -->
+                    <tr>
+                        <td align="center" style="padding: 40px 40px 20px 40px; text-align: center;">
+                            <img src="cid:aastraalogo" width="100" height="100" alt="Aastraa Logo" style="display: block;">
+                        </td>
+                    </tr>
+                    
+                    <!-- Content Area -->
+                    <tr>
+                        <td style="padding: 40px 40px 30px 40px;">
+                            <h2 style="color: #1e293b; margin-top: 0; margin-bottom: 20px; font-size: 20px; font-weight: 700;">${subject}</h2>
+                            <div style="font-size: 16px; line-height: 1.6; color: #475569;">
+                                ${msg.replace(/\n/g, '<br>')}
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer with Gray Tones -->
+                    <tr>
+                        <td style="background-color: #f1f5f9; padding: 30px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
+                            <div style="margin-bottom: 16px;">
+                                <a href="https://aastraa.vercel.app" style="display: inline-block; color: #0ea5e9; text-decoration: none; font-weight: 600; font-size: 14px; margin: 0 12px;">Website</a>
+                                <a href="#" style="display: inline-block; color: #64748b; text-decoration: none; font-weight: 600; font-size: 14px; margin: 0 12px;">Support</a>
+                                <a href="#" style="display: inline-block; color: #64748b; text-decoration: none; font-weight: 600; font-size: 14px; margin: 0 12px;">Privacy</a>
+                            </div>
+                            <p style="margin: 0; font-size: 12px; color: #94a3b8; line-height: 1.5;">
+                                &copy; 2026 Aastraa AI. All rights reserved.<br>
+                                Sent via Aastraa Intelligent Agent Service.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+`;
 
-   async function sendEmail(to,subject,msg){
-   try{
-    
-   const result = await transporter.sendMail({
-    from: process.env.GMAIL_USER,
-    to:to,
-    subject:subject,
-    html:msg
- })
- console.log("Email sent result:", result);
-   }
-   catch(err){
-    console.log("Email send error:", err.message);
-    return ` err in sending a mail ${err}`
-   }
-   return  `Mail is sended to ${to}`
+async function sendEmail(to, subject, msg) {
+
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
+    console.error("Email credentials missing in environment variables.");
+    return "Error: Email service is not configured correctly (missing credentials).";
   }
-  
- return JSON.stringify(await sendEmail(to,subject,msg));
 
-},{
-  name:"emailSendTool",
-  description:"sends emails on the provided mail",
-  schema:z.object({
+  try {
+    const path = require('path');
+    const logoPath = path.join(__dirname, 'logo.png');
+    
+    const result = await transporter.sendMail({
+      from: `Aastraa AI <${process.env.GMAIL_USER}>`,
+      to: to,
+      subject: subject,
+      html: getEmailTemplate(subject, msg),
+      attachments: [{
+        filename: 'logo.png',
+        path: logoPath,
+        cid: 'aastraalogo'
+      }]
+    });
+    console.log("Email sent successfully:", result.messageId);
+    return `Mail successfully sent to ${to}`;
+  } catch (err) {
+    console.error("Email send error details:", err);
+    return `Error sending email: ${err.message || err}`;
+  }
+}
 
-    to:z.string().describe("The email of a person whom you need to send mail"),
-    subject:z.string().describe('The subject of an email'),
-    msg:z.string().describe("The message need to send in email"),
-
+const emailSendTool = tool(async ({ to, subject, msg }) => {
+  const result = await sendEmail(to, subject, msg);
+  return JSON.stringify({ status: result.includes("Error") ? "error" : "success", message: result });
+}, {
+  name: "emailSendTool",
+  description: "sends professional and formal emails to the provided email address. DO NOT use markdown formatting like ** in the message content. Ensure the tone is highly professional and suitable for business communication.",
+  schema: z.object({
+    to: z.string().describe("The recipient's email address"),
+    subject: z.string().describe("The subject of the email (formal)"),
+    msg: z.string().describe("The highly professional HTML or text content of the email message. Do not use special markdown characters like **."),
   })
 })
 

@@ -10,7 +10,7 @@ const tools = require("./tools");
 const model = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
   model: "openai/gpt-oss-120b", 
-  temperature: 0.5,
+  temperature: 0.3,
   streaming: true, 
 });
 
@@ -18,7 +18,13 @@ const model = new ChatGroq({
 const graph = new StateGraph(MessagesAnnotation)
 
   .addNode("chat", async (state, config) => {
-    const response = await model.invoke(state.messages, {
+    const systemPrompt = {
+      role: "system",
+      content: "You are a professional assistant for Aastraa AI. Strictly avoid using markdown formatting such as ** for bold or any other special characters like symbols for emphasis. All responses must be clean, plain text, and highly professional. When generating email content, use a formal business tone without any markdown or special characters."
+    };
+    
+    const messages = [systemPrompt, ...state.messages];
+    const response = await model.invoke(messages, {
       tools: [tools.searchWeather, tools.TopNewsOfCity, tools.longtermMemoryTool, tools.webSearchTool, tools.emailSendTool],
     });
 
