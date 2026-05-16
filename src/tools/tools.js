@@ -10,7 +10,8 @@ const nodemailer=require('nodemailer');
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
   port: 465,
-  secure: true,
+  secure: true, 
+  family: 4, // Force IPv4 to avoid ENETUNREACH on IPv6-only routes
   auth: {
     user: process.env.GMAIL_USER,
     pass: process.env.GMAIL_PASS
@@ -221,20 +222,28 @@ async function sendEmail(to, subject, msg) {
   }
 
   try {
+    const fs = require('fs');
     const path = require('path');
     const logoPath = path.join(__dirname, 'logo.png');
     
-    const result = await transporter.sendMail({
+    const mailOptions = {
       from: `Aastraa AI <${process.env.GMAIL_USER}>`,
       to: to,
       subject: subject,
       html: getEmailTemplate(subject, msg),
-      attachments: [{
+      attachments: []
+    };
+
+    // Only attach logo if it exists to prevent errors
+    if (fs.existsSync(logoPath)) {
+      mailOptions.attachments.push({
         filename: 'logo.png',
         path: logoPath,
         cid: 'aastraalogo'
-      }]
-    });
+      });
+    }
+
+    const result = await transporter.sendMail(mailOptions);
     console.log("Email sent successfully:", result.messageId);
     return `Mail successfully sent to ${to}`;
   } catch (err) {
