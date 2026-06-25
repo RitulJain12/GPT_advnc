@@ -35,6 +35,7 @@ module.exports.registerUser= async(req,res)=>{
   }
   catch(err){
    console.log(err);
+   return res.status(500).json({ message: "Internal server error", error: err.message });
   }
 
 
@@ -42,61 +43,68 @@ module.exports.registerUser= async(req,res)=>{
 
 
 module.exports.loginUser= async(req,res)=>{
-    const{email,password}=req.body;
-    if (!email || !password) {
-      return  res.status(402).json({
-            message:"Invalid Credentials"
-        })
-    }
-    const user = await userModel.findOne({ email });
-    if(!user) {
-        return  res.status(402).json({
+    try {
+      const{email,password}=req.body;
+      if (!email || !password) {
+        return  res.status(400).json({
               message:"Invalid Credentials"
           })
       }
-      const isValid = await bcrypt.compare(password, user.password);
-    if (!isValid) return res.status(402).json({ message: "Invalid Credentials" });
-    
-      const token=jwt.sign({id:user._id},process.env.KEY);
-      res.cookie("token", token, {
-        httpOnly: true,
-        secure: true,       
-        sameSite: "none",    
-        path: "/",
-        maxAge: 7 * 24 * 60 * 60 * 1000
-      });
+      const user = await userModel.findOne({ email });
+      if(!user) {
+          return  res.status(400).json({
+                message:"Invalid Credentials"
+            })
+        }
+        const isValid = await bcrypt.compare(password, user.password);
+      if (!isValid) return res.status(400).json({ message: "Invalid Credentials" });
       
-    
-      console.log("loging......");
-      res.status(200).json({
-          message:"User Successfully Logedin",
-          user:{
-              email:user.email,
-              id:user._id,
-              fullName:user.fullName
-          }
-      })
-  
+        const token=jwt.sign({id:user._id},process.env.KEY);
+        res.cookie("token", token, {
+          httpOnly: true,
+          secure: true,       
+          sameSite: "none",    
+          path: "/",
+          maxAge: 7 * 24 * 60 * 60 * 1000
+        });
+        
+      
+        console.log("loging......");
+        return res.status(200).json({
+            message:"User Successfully Logedin",
+            user:{
+                email:user.email,
+                id:user._id,
+                fullName:user.fullName
+            }
+        })
+    } catch(err) {
+        console.log(err);
+        return res.status(500).json({ message: "Internal server error", error: err.message });
+    }
   }  
 
 
   module.exports.logOut= async(req,res)=>{
-  
-      const {token}=req.cookies;
-      if(!token) return res.status(404).json({
-        "message":"your already logedOut"
-      })
-      res.cookie("token", "", {
-        httpOnly: true,
-        expires: new Date(0),
-        secure: true,
-        sameSite: "none"
-      });
-    
-      res.status(200).json({
-          message:"User Successfully LogeOut",
-      })
-  
+      try {
+        const {token}=req.cookies;
+        if(!token) return res.status(400).json({
+          "message":"your already logedOut"
+        })
+        res.cookie("token", "", {
+          httpOnly: true,
+          expires: new Date(0),
+          secure: true,
+          sameSite: "none"
+        });
+      
+        return res.status(200).json({
+            message:"User Successfully LogeOut",
+        })
+      } catch(err) {
+        console.log(err);
+        return res.status(500).json({ message: "Internal server error", error: err.message });
+      }
   }
 
  

@@ -5,24 +5,10 @@ const axios = require("axios");
 const ChatgptIndex=require('../services/vectordb');
 const GenerateVector=require('../services/ai-service').GenerateVector;
 const { tavily } = require('@tavily/core');
-const nodemailer=require('nodemailer');
+const { Resend } = require('resend');
 
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // Use STARTTLS for better compatibility
-  family: 4,     // Force IPv4 to avoid ENETUNREACH on IPv6-only routes
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_PASS
-  },
-  pool: true,
-  maxConnections: 5,
-  maxMessages: 100,
-  connectionTimeout: 20000, 
-  greetingTimeout: 20000,
-  socketTimeout: 20000
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 const searchWeather = tool(
   async ({ city }, config) => {
     const token = config.metadata.token;
@@ -49,13 +35,10 @@ const searchWeather = tool(
 
 const TopNewsOfCity = tool(
   async ({ city}, config) => {
-    //const token = config.metadata.token;
-   //// if(quantity>stock) throw Error('The Quantity Of Product Exceeds the Stock')
    console.log(city);
  const res=   await axios.get(
       `https://newsapi.org/v2/everything?q=${city}&apiKey=0e0fac0115ca4157b70faf01e30adb1f`
     );
-      //console.log(res.data.articles)
       const news=[];
     for(let i=0;i<=10;i++){
       news.push(res.data?.articles[i]?.description||"NOT FOUND");
@@ -73,11 +56,7 @@ const TopNewsOfCity = tool(
 );
 
 const longtermMemoryTool = tool(
-  
-
     async ({ mode, text, userId }, config) => {
-
-   
       const effectiveUserId = userId || config?.metadata?.userId;
 
       if (!text || typeof text !== "string" || text.trim().length === 0) {
@@ -87,8 +66,6 @@ const longtermMemoryTool = tool(
       if (!effectiveUserId) {
         return "Error: longtermMemoryTool requires 'userId'.";
       }
-     
-    
     
     try {
       const vectors = await GenerateVector(text);
@@ -215,10 +192,9 @@ const getEmailTemplate = (subject, msg) => `
 `;
 
 async function sendEmail(to, subject, msg) {
-
-  if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
-    console.error("Email credentials missing in environment variables.");
-    return "Error: Email service is not configured correctly (missing credentials).";
+  if (!process.env.RESEND_API_KEY) {
+    console.error("Email credentials missing: RESEND_API_KEY is not defined in environment variables.");
+    return "Error: Email service is not configured correctly (missing RESEND_API_KEY).";
   }
 
   try {
@@ -226,25 +202,29 @@ async function sendEmail(to, subject, msg) {
     const path = require('path');
     const logoPath = path.join(__dirname, 'logo.png');
     
-    const mailOptions = {
-      from: `Aastraa AI <${process.env.GMAIL_USER}>`,
-      to: to,
-      subject: subject,
-      html: getEmailTemplate(subject, msg),
-      attachments: []
-    };
-
-    // Only attach logo if it exists to prevent errors
+    let attachments = [];
     if (fs.existsSync(logoPath)) {
-      mailOptions.attachments.push({
+      const logoData = fs.readFileSync(logoPath);
+      attachments.push({
         filename: 'logo.png',
-        path: logoPath,
-        cid: 'aastraalogo'
+        content: logoData
       });
     }
 
-    const result = await transporter.sendMail(mailOptions);
-    console.log("Email sent successfully:", result.messageId);
+    const data = await resend.emails.send({
+      from: 'Aastraa AI <onboarding@resend.dev>',
+      to: [to],
+      subject: subject,
+      html: getEmailTemplate(subject, msg),
+      attachments: attachments
+    });
+
+    if (data.error) {
+      console.error("Email send error details from Resend:", data.error);
+      return `Error sending email: ${data.error.message}`;
+    }
+
+    console.log("Email sent successfully via Resend:", data.data?.id);
     return `Mail successfully sent to ${to}`;
   } catch (err) {
     console.error("Email send error details:", err);
