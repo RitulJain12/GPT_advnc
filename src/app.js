@@ -1,13 +1,23 @@
 const express=require('express');
 const app=express();
 const cookieParser=require('cookie-parser');
-const authRoutes=require('./routes/authRoutes');
-const chatRoutes=require('../src/routes/ChatRoute');
+const authRoutes = require('./routes/authRoutes');
+const chatRoutes = require('./routes/ChatRoute');
+const bucket = require('./services/tockenbucket');
 
 const path=require('path');
 const cors = require("cors");
-app.use(express.static('./public'))
 
+app.use((req, res, next) => {
+  if (!bucket.allowRequest()) {
+    return res.status(429).json({
+      message: "Too Many Requests"
+    });
+  }
+  next();
+});
+
+app.use(express.static('./public'));
 app.use(cookieParser());
 app.use(express.json());
 const allowedOrigins = [
