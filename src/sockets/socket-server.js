@@ -3,19 +3,30 @@ const cookie = require('cookie');
 const jwt = require('jsonwebtoken');
 const userModel = require('../models/user');
 const MessageModel = require('../models/message');
-const { HumanMessage, SystemMessage, AIMessage } = require('@langchain/core/messages')
+const chatModel = require('../models/chat-model');
+const { HumanMessage } = require('@langchain/core/messages')
 const agent = require('../tools/agent')
+const { clientOrigins } = require('../config/env');
+
+function textFromChunk(chunk) {
+  if (!chunk) return '';
+  const content = chunk.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.map((part) => {
+      if (typeof part === 'string') return part;
+      if (part && typeof part.text === 'string') return part.text;
+      return '';
+    }).join('');
+  }
+  return '';
+}
 
 
 function initSocketServer(httpserver) {
   const io = new Server(httpserver, {
     cors: {
-      origin: [
-        "http://localhost:5173",
-        "https://gpt-advnc-1.onrender.com",
-        "https://aasstraa-ai.netlify.app",
-        "https://aastraa.vercel.app"
-      ],
+      origin: clientOrigins(),
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
       credentials: true
     }
@@ -28,24 +39,30 @@ function initSocketServer(httpserver) {
 
 
   io.use(async (socket, next) => {
-    const cookies = cookie.parse(socket.handshake.headers?.cookie || "");
-
-    if (!cookies.token) {
-      console.log('Socket auth failed: no token cookie');
-      next(new Error("Unauthorized"));
-    }
     try {
-      const decoded = jwt.verify(cookies.token, process.env.KEY);
-      console.log(decoded);
-      const user = await userModel.findById(decoded.id);
+      const cookies = cookie.parse(socket.handshake.headers?.cookie || "");
+      const handshakeToken = socket.handshake.auth?.token;
+      const token = cookies.token || (
+        handshakeToken && handshakeToken !== 'undefined' && handshakeToken !== 'null'
+          ? handshakeToken
+          : null
+      );
+
+      if (!token) {
+        return next(new Error("Unauthorized"));
+      }
+
+      const decoded = jwt.verify(token, process.env.KEY);
+      const user = await userModel.findById(decoded.id).select('-password');
+      if (!user) return next(new Error("Unauthorized"));
+
       socket.user = user;
-      socket.token = cookies.token;
-      console.log(user);
-      next();
+      socket.token = token;
+      return next();
     }
     catch (err) {
       console.log('Socket auth failed:', err.message || err);
-      next(new Error(err));
+      return next(new Error("Unauthorized"));
     }
 
   })
@@ -61,31 +78,21 @@ function initSocketServer(httpserver) {
 
         if (!msg || !msg.chatId || !msg.message) {
           console.error('Invalid message payload received', msg);
-          return socket.emit('ai-message-error', { error: 'Invalid message payload' });
+          return socket.emit('ai-message-error', { error: 'Invalid message payload', chatId: msg?.chatId });
         }
-
-
-        console.log(msg);
 
         const stream = await agent.streamEvents(
           {
             messages: [
-              new SystemMessage(`You are Astra AI, an intelligent assistant created by Ritul Jain.
-Current date: ${new Date().toLocaleDateString()}
-
-Memory Rules:
-- Before answering, use longtermMemoryTool with mode="retrieve" and the user's query as "text" to find relevant past info.
-- If the user shares a new personal fact (e.g., "I like coffee"), use longtermMemoryTool with mode="store" and that fact as "text".
-- Be natural, don't mention tools.`),
               new HumanMessage(msg.message)
-
             ],
-
           },
           {
             version: "v2",
             configurable: {
-              thread_id: msg.chatId.toString()
+              thread_id: msg.chatId.toString(),
+              token: socket.token,
+              userId: socket.user._id.toString()
             },
             metadata: {
               token: socket.token,
@@ -97,46 +104,42 @@ Memory Rules:
         let finalResponse = "";
 
         for await (const event of stream) {
-          const eventType = event.event;
+          if (event.event !== "on_chat_model_stream") continue;
+          const text = textFromChunk(event.data?.chunk);
+          if (!text) continue;
 
-          if (eventType === "on_chat_model_stream") {
-            const chunk = event.data.chunk;
-            if (chunk && chunk.content && typeof chunk.content === "string") {
-              finalResponse += chunk.content;
-
-              socket.emit("ai-message-chunk", {
-                chunk: chunk.content,
-                chatId: msg.chatId
-              });
-            }
-          }
+          finalResponse += text;
+          socket.emit("ai-message-chunk", {
+            chunk: text,
+            chatId: msg.chatId
+          });
         }
-
-        console.log(finalResponse);
 
         socket.emit("ai-message-response", {
           response: finalResponse,
           chatId: msg.chatId
         });
 
-
-        const UserMsg = await MessageModel.create({
+        await MessageModel.create({
           chat: msg.chatId,
           user: socket.user._id,
           content: msg.message,
           role: 'user'
         });
-        const Modelmsg = await MessageModel.create({
-          chat: msg.chatId,
-          user: socket.user._id,
-          content: finalResponse,
-          role: 'model'
-        });
+        if (finalResponse.trim()) {
+          await MessageModel.create({
+            chat: msg.chatId,
+            user: socket.user._id,
+            content: finalResponse,
+            role: 'model'
+          });
+        }
+        await chatModel.findByIdAndUpdate(msg.chatId, { lastActivity: new Date() });
       }
 
       catch (err) {
         console.error("Error handling ai-message:", err);
-        socket.emit('ai-message-error', { error: err.message });
+        socket.emit('ai-message-error', { error: err.message || 'The assistant failed to respond.', chatId: msg?.chatId });
       }
 
     });

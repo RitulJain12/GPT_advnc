@@ -6,15 +6,19 @@ const ChatgptIndex=require('../services/vectordb');
 const GenerateVector=require('../services/ai-service').GenerateVector;
 const { tavily } = require('@tavily/core');
 const { Resend } = require('resend');
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+const nodemailer = require('nodemailer');
+const fs = require('fs');
+const path = require('path');
 
 const searchWeather = tool(
   async ({ city }, config) => {
-    const token = config.metadata.token;
+    const token = config?.metadata?.token;
+    if (!process.env.WEATHER_API_KEY) {
+      return 'Weather lookup is not configured.';
+    }
 
     const response = await axios.get(
-      `https://api.weatherapi.com/v1/current.json?key=2e8d6b81d55e4511be3100050251808&q=${city}`,
+      `${process.env.WEATHER_API_URL || 'https://api.weatherapi.com/v1/current.json'}?key=${encodeURIComponent(process.env.WEATHER_API_KEY)}&q=${encodeURIComponent(city)}`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -36,8 +40,11 @@ const searchWeather = tool(
 const TopNewsOfCity = tool(
   async ({ city}, config) => {
    console.log(city);
+    if (!process.env.NEWS_API_KEY) {
+      return 'News lookup is not configured.';
+    }
  const res=   await axios.get(
-      `https://newsapi.org/v2/everything?q=${city}&apiKey=0e0fac0115ca4157b70faf01e30adb1f`
+      `${process.env.NEWS_API_URL || 'https://newsapi.org/v2/everything'}?q=${encodeURIComponent(city)}&apiKey=${encodeURIComponent(process.env.NEWS_API_KEY)}`
     );
       const news=[];
     for(let i=0;i<=10;i++){
@@ -140,7 +147,41 @@ const webSearchTool = tool(async ({query})=>{
   })
 })
 
-const getEmailTemplate = (subject, msg) => `
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+let gmailTransporter;
+function getGmailTransporter() {
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) return null;
+  if (!gmailTransporter) {
+    gmailTransporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 465),
+      secure: String(process.env.SMTP_SECURE || 'true') !== 'false',
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_PASS,
+      },
+      connectionTimeout: 12000,
+      greetingTimeout: 12000,
+      socketTimeout: 20000,
+    });
+  }
+  return gmailTransporter;
+}
+
+const getEmailTemplate = (subject, msg, includeLogo) => {
+  const site = process.env.APP_URL || '';
+  const brand = process.env.MAIL_FROM_NAME || 'Astra AI';
+  const websiteLink = site
+    ? `<a href="${escapeHtml(site)}" style="display: inline-block; color: #0ea5e9; text-decoration: none; font-weight: 600; font-size: 14px; margin: 0 12px;">Website</a>`
+    : '';
+  return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -152,19 +193,19 @@ const getEmailTemplate = (subject, msg) => `
         <tr>
             <td align="center">
                 <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); margin: 0 20px; border: 1px solid #e2e8f0;">
-                    <!-- Minimalist Header with Logo Only -->
                     <tr>
                         <td align="center" style="padding: 40px 40px 20px 40px; text-align: center;">
-                            <img src="cid:aastraalogo" width="100" height="100" alt="Aastraa Logo" style="display: block;">
+                            ${includeLogo
+                              ? '<img src="cid:aastraalogo" width="100" height="100" alt="Aastraa Logo" style="display: block;">'
+                              : `<div style="font-size: 22px; font-weight: 700; color: #0ea5e9;">${escapeHtml(brand)}</div>`}
                         </td>
                     </tr>
                     
-                    <!-- Content Area -->
                     <tr>
                         <td style="padding: 40px 40px 30px 40px;">
-                            <h2 style="color: #1e293b; margin-top: 0; margin-bottom: 20px; font-size: 20px; font-weight: 700;">${subject}</h2>
+                            <h2 style="color: #1e293b; margin-top: 0; margin-bottom: 20px; font-size: 20px; font-weight: 700;">${escapeHtml(subject)}</h2>
                             <div style="font-size: 16px; line-height: 1.6; color: #475569;">
-                                ${msg.replace(/\n/g, '<br>')}
+                                ${escapeHtml(msg).replace(/\n/g, '<br>')}
                             </div>
                         </td>
                     </tr>
@@ -173,13 +214,13 @@ const getEmailTemplate = (subject, msg) => `
                     <tr>
                         <td style="background-color: #f1f5f9; padding: 30px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
                             <div style="margin-bottom: 16px;">
-                                <a href="https://aastraa.vercel.app" style="display: inline-block; color: #0ea5e9; text-decoration: none; font-weight: 600; font-size: 14px; margin: 0 12px;">Website</a>
+                                ${websiteLink}
                                 <a href="#" style="display: inline-block; color: #64748b; text-decoration: none; font-weight: 600; font-size: 14px; margin: 0 12px;">Support</a>
                                 <a href="#" style="display: inline-block; color: #64748b; text-decoration: none; font-weight: 600; font-size: 14px; margin: 0 12px;">Privacy</a>
                             </div>
                             <p style="margin: 0; font-size: 12px; color: #94a3b8; line-height: 1.5;">
-                                &copy; 2026 Aastraa AI. All rights reserved.<br>
-                                Sent via Aastraa Intelligent Agent Service.
+                                &copy; ${new Date().getFullYear()} ${escapeHtml(brand)}. All rights reserved.<br>
+                                Sent via ${escapeHtml(brand)}.
                             </p>
                         </td>
                     </tr>
@@ -190,46 +231,104 @@ const getEmailTemplate = (subject, msg) => `
 </body>
 </html>
 `;
+};
+
+function hideConfiguredAddresses(text) {
+  let safe = String(text || '');
+  for (const secret of [process.env.GMAIL_USER, process.env.RESEND_FROM]) {
+    const value = String(secret || '').trim();
+    if (value) safe = safe.split(value).join('the sending account');
+  }
+  return safe;
+}
+
+function verifiedResendFrom() {
+  const from = String(process.env.RESEND_FROM || '').trim();
+  // onboarding@resend.dev returns an id without delivering to a normal inbox.
+  if (!from || /resend\.dev/i.test(from)) return null;
+  return from;
+}
 
 async function sendEmail(to, subject, msg) {
-  if (!process.env.RESEND_API_KEY) {
-    console.error("Email credentials missing: RESEND_API_KEY is not defined in environment variables.");
-    return "Error: Email service is not configured correctly (missing RESEND_API_KEY).";
+  const recipient = String(to || '').trim();
+  const emailSubject = String(subject || '').trim() || 'Message from Aastraa AI';
+  const body = String(msg || '').trim();
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+    return `Error sending email: "${recipient}" is not a valid email address.`;
+  }
+  if (!body) {
+    return 'Error sending email: the message body is empty.';
+  }
+
+  const logoPath = path.join(__dirname, 'logo.png');
+  const hasLogo = fs.existsSync(logoPath);
+  const logoData = hasLogo ? fs.readFileSync(logoPath) : null;
+  const html = getEmailTemplate(emailSubject, body, hasLogo);
+  const errors = [];
+  const resendFrom = verifiedResendFrom();
+
+  if (resendFrom && process.env.RESEND_API_KEY) {
+    try {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const attachments = logoData
+        ? [{
+            filename: 'logo.png',
+            content: logoData.toString('base64'),
+            contentType: 'image/png',
+            contentId: 'aastraalogo',
+          }]
+        : undefined;
+
+      const data = await resend.emails.send({
+        from: resendFrom,
+        to: [recipient],
+        subject: emailSubject,
+        text: body,
+        html,
+        attachments,
+      });
+
+      if (!data.error && data.data?.id) {
+        console.log('Email accepted by Resend:', data.data.id);
+        return `Mail accepted for delivery to ${recipient}. Ask the user to check the inbox and spam folder. Do not mention the sending account.`;
+      }
+
+      console.error('Resend error:', data.error?.message || data.error || 'no message id');
+      errors.push(`Resend: ${data.error?.message || 'the provider did not accept the email'}`);
+    } catch (err) {
+      console.error('Resend exception:', err.message || err);
+      errors.push(`Resend: ${err.message || err}`);
+    }
   }
 
   try {
-    const fs = require('fs');
-    const path = require('path');
-    const logoPath = path.join(__dirname, 'logo.png');
-    
-    let attachments = [];
-    if (fs.existsSync(logoPath)) {
-      const logoData = fs.readFileSync(logoPath);
-      attachments.push({
-        filename: 'logo.png',
-        content: logoData
+    const transporter = getGmailTransporter();
+    if (!transporter) {
+      errors.push('Gmail: GMAIL_USER or GMAIL_PASS is not set');
+    } else {
+      const info = await transporter.sendMail({
+        from: `${process.env.MAIL_FROM_NAME || 'Astra AI'} <${process.env.GMAIL_USER}>`,
+        to: recipient,
+        subject: emailSubject,
+        text: body,
+        html,
+        attachments: hasLogo ? [{ filename: 'logo.png', path: logoPath, cid: 'aastraalogo' }] : [],
       });
+      const accepted = info.accepted || [];
+      const rejected = info.rejected || [];
+      if (!accepted.length || rejected.length) {
+        throw new Error(`recipient was not accepted (${rejected.join(', ') || 'none accepted'})`);
+      }
+      console.log('Email accepted by Gmail:', info.messageId, 'accepted:', accepted.join(','));
+      return `Mail accepted for delivery to ${recipient}. Ask the user to check the inbox and the spam folder. Do not mention the sending account, and do not say it arrived until they confirm they can see it.`;
     }
-
-    const data = await resend.emails.send({
-      from: 'Aastraa AI <onboarding@resend.dev>',
-      to: [to],
-      subject: subject,
-      html: getEmailTemplate(subject, msg),
-      attachments: attachments
-    });
-
-    if (data.error) {
-      console.error("Email send error details from Resend:", data.error);
-      return `Error sending email: ${data.error.message}`;
-    }
-
-    console.log("Email sent successfully via Resend:", data.data?.id);
-    return `Mail successfully sent to ${to}`;
   } catch (err) {
-    console.error("Email send error details:", err);
-    return `Error sending email: ${err.message || err}`;
+    console.error('Gmail exception:', err.message || err);
+    errors.push(`Gmail: ${err.message || err}`);
   }
+
+  return hideConfiguredAddresses(`Error sending email: ${errors.join(' | ') || 'no mail provider accepted the message'}`);
 }
 
 const emailSendTool = tool(async ({ to, subject, msg }) => {

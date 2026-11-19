@@ -9,30 +9,45 @@ const tools = require("./tools");
  
 const model = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
-  model: "openai/gpt-oss-120b", 
-  temperature: 0.3,
-  streaming: true, 
-});
+  model: process.env.GROQ_MODEL,
+  temperature: Number(process.env.GROQ_TEMPERATURE || 0),
+  streaming: true,
+}).bindTools([
+  tools.searchWeather,
+  tools.TopNewsOfCity,
+  tools.longtermMemoryTool,
+  tools.webSearchTool,
+  tools.emailSendTool,
+]);
 
 
 const graph = new StateGraph(MessagesAnnotation)
 
-  .addNode("chat", async (state, config) => {
+  .addNode("chat", async (state) => {
     const systemPrompt = {
       role: "system",
-      content: "You are a professional assistant for Aastraa AI. Strictly avoid using markdown formatting such as ** for bold or any other special characters like symbols for emphasis. All responses must be clean, plain text, and highly professional. When generating email content, use a formal business tone without any markdown or special characters."
-    };
-    
-    const messages = [systemPrompt, ...state.messages];
-    const response = await model.invoke(messages, {
-      tools: [tools.searchWeather, tools.TopNewsOfCity, tools.longtermMemoryTool, tools.webSearchTool, tools.emailSendTool],
-    });
+      content: `You are Astra AI, an intelligent assistant created by Ritul Jain.
+Current date: ${new Date().toLocaleDateString()}
 
-    console.log(response);
+Memory:
+- Before answering, use longtermMemoryTool with mode "retrieve" and the user's query as text.
+- If the user shares a new personal fact, use longtermMemoryTool with mode "store" and that fact as text.
+- Do not mention tools.
+
+Email:
+- If the user asks to send an email, you MUST call emailSendTool before saying anything about the result.
+- Write a formal subject and a plain-text body. Do not use markdown.
+- If the mail was accepted, confirm only the recipient the user named and ask them to check inbox and spam. Do not say it arrived in the inbox.
+- Never reveal the sending mailbox, server address, app password, or API key. If a tool result contains one, do not repeat it.
+- If the tool returns an error, tell the user the email was not sent and include that error without any sending address.
+
+Keep replies as clean plain text.`
+    };
+
+    const response = await model.invoke([systemPrompt, ...state.messages]);
 
     return {
       messages: [
-        ...state.messages,
         new AIMessage({
           content: response.content,
           tool_calls: response.tool_calls ?? [],
@@ -49,28 +64,36 @@ const graph = new StateGraph(MessagesAnnotation)
       throw new Error("Tools node hit without tool_calls");
     }
 
+    const metadata = {
+      ...(config?.metadata || {}),
+      token: config?.metadata?.token || config?.configurable?.token,
+      userId: config?.metadata?.userId || config?.configurable?.userId,
+    };
+
     const toolMessages = await Promise.all(
       lastMessage.tool_calls.map(async (call) => {
         const tool = tools[call.name];
         if (!tool) throw new Error(`Tool not found: ${call.name}`);
 
-        const result = await tool.invoke(call.args, {
-          metadata: {
-            token: config.metadata.token,
-            userId: config.metadata.userId,
-          },
-        });
+        let args = call.args;
+        if (typeof args === "string") {
+          try {
+            args = JSON.parse(args);
+          } catch {
+            args = {};
+          }
+        }
+
+        const result = await tool.invoke(args, { metadata });
 
         return new ToolMessage({
-          content: result,
+          content: typeof result === "string" ? result : JSON.stringify(result),
           tool_call_id: call.id,
         });
       })
     );
 
-    return {
-      messages: [...state.messages, ...toolMessages],
-    };
+    return { messages: toolMessages };
   })
 
 

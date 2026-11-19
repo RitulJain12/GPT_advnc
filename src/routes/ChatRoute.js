@@ -10,5 +10,5 @@ router.get('/',authUser,getAllChats)
 router.post('/create',authUser,createChat);
 router.delete('/:id',authUser,Deltchat);
 router.put('/:id',authUser,updateTitle)
-router.post('/upload-files',upload.array("files"),Filehandler)
+router.post('/upload-files',authUser,upload.array("files"),Filehandler)
 module.exports=router;

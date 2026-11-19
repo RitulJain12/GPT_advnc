@@ -7,8 +7,19 @@ const bucket = require('./services/tockenbucket');
 
 const path=require('path');
 const cors = require("cors");
+const { clientOrigins } = require('./config/env');
 
-app.use((req, res, next) => {
+const allowedOrigins = clientOrigins();
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true
+}));
+app.use(cookieParser());
+app.use(express.json({ limit: '2mb' }));
+app.use(express.static(path.join(__dirname,'../public')));
+
+app.use('/api', (req, res, next) => {
   if (!bucket.allowRequest()) {
     return res.status(429).json({
       message: "Too Many Requests"
@@ -17,23 +28,6 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.static('./public'));
-app.use(cookieParser());
-app.use(express.json());
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:2130",
-  "https://gpt-advnc-1.onrender.com",
-  "https://aasstraa-ai.netlify.app",
-  "https://aastraa.vercel.app"
-];
-
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true
-}));
-app.use(express.static(path.join(__dirname,'../public')))
- 
 app.use('/api/auth',authRoutes);
 app.use('/api/chat',chatRoutes);
 app.use('/api/health',(req,res)=>{

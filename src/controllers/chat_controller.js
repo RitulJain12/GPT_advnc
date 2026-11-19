@@ -72,7 +72,7 @@ async function getAllChats(req,res) {
     
     const chatList = await chatModel.find(
       {user:req.user._id}
-    );
+    ).sort({ lastActivity: -1, updatedAt: -1 });
     
     if (!chatList) {
       return res.status(404).json({
@@ -83,7 +83,7 @@ async function getAllChats(req,res) {
 
 
     for (let cht of chatList) {
-      const msgs = await MessageModel.find({ chat: cht._id }).select("-user -chat");
+      const msgs = await MessageModel.find({ chat: cht._id }).sort({ createdAt: 1 }).select("-user -chat");
     
       chats.push({
         ...cht.toObject(),  // IMPORTANT
@@ -103,10 +103,11 @@ async function getAllChats(req,res) {
 
 async function Filehandler(req,res) {
  const {files}=req;
+ if (!files || !files[0]) {
+  return res.status(400).json({ message: "No file uploaded" });
+ }
  const file=files[0];
-  console.log(req.body);
-  console.log(files[0]);
-  const {msg}=req.body;
+  const {msg, chatId}=req.body;
   const prompt=`You are a professional AI assistant. You will receive two inputs:
 
 1.  The extracted text or description of the uploaded file/image (PDF, text file, document, image, etc.).
@@ -147,9 +148,35 @@ Rules:
 `
  try{
   let response= await main(prompt,file.buffer,file.mimetype);
-  response=response.replace(/^```json\s*|```$/g,'').trim();
-  const data=JSON.parse(response);
-  console.log(data);
+  response=String(response || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+  const start = response.indexOf('{');
+  const end = response.lastIndexOf('}');
+  if (start !== -1 && end !== -1) response = response.slice(start, end + 1);
+
+  let data;
+  try {
+    data = JSON.parse(response);
+  } catch {
+    data = { status: "success", content: { response: response || "I couldn't read that file." } };
+  }
+
+  const answer = data?.content?.response || data?.message || "I couldn't read that file.";
+  if (req.user && chatId) {
+    await MessageModel.create({
+      chat: chatId,
+      user: req.user._id,
+      content: msg || `Uploaded ${file.originalname}`,
+      role: 'user'
+    });
+    await MessageModel.create({
+      chat: chatId,
+      user: req.user._id,
+      content: answer,
+      role: 'model'
+    });
+    await chatModel.findByIdAndUpdate(chatId, { lastActivity: new Date() });
+  }
+
    res.status(201).json({
     msg: "Content Generated successfully",
     data
