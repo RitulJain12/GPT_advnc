@@ -22,7 +22,11 @@ async function GenerateVector(contents) {
             outputDimensionality: Number(process.env.GEMINI_EMBED_DIMENSIONS || 768)
         }
     })
-    return response.embeddings[0].values;
+    const values = response.embeddings?.[0]?.values;
+    if (!Array.isArray(values) || !values.length) {
+        throw new Error('Gemini returned no embedding');
+    }
+    return values;
 }
 
 

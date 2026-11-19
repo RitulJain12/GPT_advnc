@@ -30,8 +30,10 @@ const graph = new StateGraph(MessagesAnnotation)
 Current date: ${new Date().toLocaleDateString()}
 
 Memory:
-- Before answering, use longtermMemoryTool with mode "retrieve" and the user's query as text.
+- Messages already in this conversation are the short-term memory for this chat. Use them before asking the user to repeat something.
+- Before answering, use longtermMemoryTool with mode "retrieve" and the user's query as text. Do not pass a user id.
 - If the user shares a new personal fact, use longtermMemoryTool with mode "store" and that fact as text.
+- If memory is unavailable, answer normally and do not mention keys or internal errors unless the user asked you to remember something.
 - Do not mention tools.
 
 Email:
@@ -84,7 +86,14 @@ Keep replies as clean plain text.`
           }
         }
 
-        const result = await tool.invoke(args, { metadata });
+        let result;
+        try {
+          result = await tool.invoke(args, { metadata, configurable: metadata });
+        } catch (err) {
+          const status = err?.response?.status || err?.status || err?.statusCode;
+          console.error(`Tool ${call.name} failed:`, status || err?.message || err);
+          result = `Error: ${call.name} could not complete${status ? ` (status ${status})` : ''}.`;
+        }
 
         return new ToolMessage({
           content: typeof result === "string" ? result : JSON.stringify(result),

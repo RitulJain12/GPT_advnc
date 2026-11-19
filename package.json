@@ -20,7 +20,8 @@
     
     
     
-"dev": "node Server.js"
+"dev": "node Server.js",
+"gmail-auth": "node scripts/gmail-oauth.js"
     
     
 },
